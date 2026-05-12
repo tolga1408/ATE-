@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>ATEŞ 🔥 — Hand on Fire Card Game</title>
+<meta name="description" content="ATEŞ - Elin alev alev yanıyor! Kartları çabuk oyna, kombolar yap, hayatta kal." />
+<style>
+  /* =====================================================================
+     ATEŞ — Hand on Fire
+     Single-file browser card game
+     ===================================================================== */
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0a;
+    --bg-2: #14080a;
+    --fire-red: #ff2a2a;
+    --fire-orange: #ff7a18;
+    --fire-yellow: #ffd23f;
+    --ember: #8a1a0a;
+    --card-bg: linear-gradient(160deg, #1c1416 0%, #0f0a0b 100%);
+    --card-border: #2a1d1f;
+    --text: #f5e9d6;
+    --muted: #a08977;
+    --green: #3ad177;
+    --shadow: 0 10px 30px rgba(0,0,0,.6), 0 2px 6px rgba(255,80,0,.2);
+  }
+
+  html, body {
+    height: 100%;
+    background: radial-gradient(ellipse at center top, #1a0606 0%, var(--bg) 60%, #050505 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Flickering fire ambience behind everything */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 600px 300px at 20% 100%, rgba(255,80,0,.18), transparent 70%),
+      radial-gradient(ellipse 500px 250px at 80% 100%, rgba(255,40,0,.15), transparent 70%);
+    pointer-events: none;
+    animation: ambient 4s ease-in-out infinite alternate;
+    z-index: 0;
+  }
+  @keyframes ambient {
+    0%   { opacity: .8; }
+    100% { opacity: 1; }
+  }
+
+  /* ========== APP CONTAINER ========== */
+  #app {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    z-index: 1;
+  }
+
+  /* ========== TOP HUD ========== */
+  .hud {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    gap: 10px;
+    background: linear-gradient(180deg, rgba(0,0,0,.6), rgba(0,0,0,0));
+    z-index: 5;
+  }
+  .hud-left, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 110px;
+  }
+  .hud-center {
+    flex: 1;
+    text-align: center;
+  }
+  .score {
+    font-size: clamp(28px, 6vw, 44px);
+    font-weight: 900;
+    letter-spacing: 1px;
+    background: linear-gradient(180deg, #fff4c4 0%, var(--fire-orange) 60%, var(--fire-red) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 20px rgba(255,80,0,.4);
+    line-height: 1;
+  }
+  .score-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .lives {
+    font-size: clamp(22px, 4vw, 30px);
+    letter-spacing: 2px;
+    filter: drop-shadow(0 0 8px rgba(255,80,0,.6));
+  }
+  .lives .dead { filter: grayscale(1) brightness(.4); }
+  .multiplier {
+    font-size: 12px;
+    color: var(--fire-yellow);
+    font-weight: 700;
+    height: 14px;
+  }
+  .icon-btn {
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.1);
+    color: var(--text);
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    font-size: 18px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .1s, background .15s;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,.1); }
+  .icon-btn:active { transform: scale(.92); }
+
+  /* ========== CARD AREA ========== */
+  .play-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    perspective: 1200px;
+    position: relative;
+  }
+  .hand {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    max-width: 100%;
+  }
+
+  /* ========== CARD ========== */
+  .card {
+    width: clamp(90px, 17vw, 130px);
+    height: clamp(135px, 25vw, 195px);
+    background: var(--card-bg);
+    border: 2px solid var(--card-border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform .15s ease, box-shadow .15s;
+    animation: cardEnter .35s cubic-bezier(.2,.9,.3,1.2);
+    will-change: transform;
+  }
+  @keyframes cardEnter {
+    from { transform: translateY(-40px) scale(.6); opacity: 0; }
+    to   { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  .card:hover { transform: translateY(-6px) scale(1.03); }
+  .card:active { transform: translateY(-2px) scale(.98); }
+
+  .card .face {
+    font-size: clamp(40px, 9vw, 64px);
+    font-weight: 900;
+    line-height: 1;
+    text-shadow: 0 4px 14px rgba(0,0,0,.6);
+  }
+  .card .corner {
+    position: absolute;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+  .card .corner.tl { top: 6px; left: 8px; }
+  .card .corner.br { bottom: 6px; right: 8px; transform: rotate(180deg); }
+
+  /* Card type accents */
+  .card[data-type="num"]    { color: #ffe6b3; }
+  .card[data-type="fire"]   { background: linear-gradient(160deg, #3a0e08, #1a0606); border-color: #ff5a1f; }
+  .card[data-type="freeze"] { background: linear-gradient(160deg, #08283a, #060f1a); border-color: #5fc8ff; color:#bfeaff; }
+  .card[data-type="bomb"]   { background: linear-gradient(160deg, #2a0202, #100000); border-color: #ff1a1a; }
+  .card[data-type="star"]   { background: linear-gradient(160deg, #3a2c08, #1a1306); border-color: var(--fire-yellow); }
+
+  /* Fuse bar */
+  .fuse-wrap {
+    position: absolute;
+    bottom: 6px; left: 6px; right: 6px;
+    height: 8px;
+    background: rgba(0,0,0,.45);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .fuse {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--green), var(--green));
+    transform-origin: left center;
+    transition: background .25s linear;
+    box-shadow: inset 0 0 8px rgba(255,255,255,.2);
+  }
+
+  /* Critical shake */
+  .card.critical {
+    animation: shake .25s linear infinite, cardEnter .35s;
+    box-shadow: 0 0 25px rgba(255,30,0,.7), var(--shadow);
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-3px) rotate(-1deg); }
+    75% { transform: translateX(3px) rotate(1deg); }
+  }
+
+  /* Card leaving (played) */
+  .card.played {
+    animation: cardOut .35s forwards cubic-bezier(.5,.1,.7,.4);
+    pointer-events: none;
+  }
+  @keyframes cardOut {
+    0%   { transform: translateY(0) scale(1); opacity: 1; }
+    100% { transform: translateY(-80px) scale(1.2) rotate(8deg); opacity: 0; }
+  }
+
+  /* Card burning (timer ran out) */
+  .card.burned {
+    animation: burn .5s forwards;
+    pointer-events: none;
+  }
+  @keyframes burn {
+    0%   { filter: brightness(1);      transform: scale(1) rotate(0); }
+    40%  { filter: brightness(2) sepia(1) hue-rotate(-20deg); }
+    100% { filter: brightness(.2) blur(4px); transform: scale(.6) rotate(-15deg); opacity: 0; }
+  }
+
+  /* Frozen state */
+  .frozen .card {
+    box-shadow: 0 0 18px rgba(120,200,255,.6), var(--shadow);
+    filter: hue-rotate(-10deg) saturate(.7) brightness(.95);
+  }
+  .frozen .fuse { background: linear-gradient(90deg, #9be8ff, #5fc8ff) !important; }
+
+  /* ========== FLOATING SCORE POPUP ========== */
+  .pop {
+    position: absolute;
+    pointer-events: none;
+    font-weight: 900;
+    font-size: 24px;
+    color: var(--fire-yellow);
+    text-shadow: 0 2px 12px rgba(255,80,0,.8);
+    animation: pop 1s forwards;
+    z-index: 50;
+  }
+  @keyframes pop {
+    0%   { transform: translate(-50%, 0) scale(.6); opacity: 0; }
+    20%  { transform: translate(-50%, -10px) scale(1.2); opacity: 1; }
+    100% { transform: translate(-50%, -80px) scale(.9); opacity: 0; }
+  }
+
+  /* ========== COMBO PARTICLE BURST ========== */
+  .burst {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 0; height: 0;
+    pointer-events: none;
+    z-index: 40;
+  }
+  .burst span {
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--fire-yellow);
+    box-shadow: 0 0 12px var(--fire-orange);
+    animation: burst 800ms ease-out forwards;
+  }
+  @keyframes burst {
+    0%   { transform: translate(0,0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(.2); opacity: 0; }
+  }
+
+  /* ========== SCREEN FLASH RED ========== */
+  .flash-red {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 0, 0, .35);
+    pointer-events: none;
+    z-index: 100;
+    animation: flash .4s forwards;
+  }
+  @keyframes flash {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* ========== OVERLAYS (modal-like) ========== */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.85);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 20px;
+    animation: fadeIn .25s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .overlay.hidden { display: none; }
+
+  .panel {
+    width: min(440px, 100%);
+    background: linear-gradient(180deg, #160a0c 0%, #0a0506 100%);
+    border: 1px solid rgba(255,80,0,.3);
+    border-radius: 20px;
+    padding: 30px 24px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,.8), 0 0 40px rgba(255,80,0,.2);
+  }
+  .title {
+    font-size: clamp(54px, 14vw, 88px);
+    font-weight: 900;
+    letter-spacing: 6px;
+    background: linear-gradient(180deg, #fff4c4 0%, var(--fire-yellow) 25%, var(--fire-orange) 60%, var(--fire-red) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 30px rgba(255,80,0,.5);
+    line-height: 1;
+    margin-bottom: 6px;
+    animation: titlePulse 2.5s ease-in-out infinite;
+  }
+  @keyframes titlePulse {
+    0%,100% { filter: drop-shadow(0 0 12px rgba(255,80,0,.5)); }
+    50%     { filter: drop-shadow(0 0 24px rgba(255,80,0,.9)); }
+  }
+  .tagline {
+    color: var(--muted);
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .big-btn {
+    display: inline-block;
+    background: linear-gradient(180deg, var(--fire-orange), var(--fire-red));
+    color: white;
+    border: none;
+    padding: 16px 40px;
+    border-radius: 50px;
+    font-size: 20px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(255,40,0,.4), inset 0 1px 0 rgba(255,255,255,.3);
+    transition: transform .12s, box-shadow .15s;
+    margin: 8px 6px;
+  }
+  .big-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(255,40,0,.6), inset 0 1px 0 rgba(255,255,255,.3); }
+  .big-btn:active { transform: translateY(0); }
+  .ghost-btn {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,.15);
+    padding: 12px 26px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    margin: 4px;
+    transition: background .15s;
+  }
+  .ghost-btn:hover { background: rgba(255,255,255,.08); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 18px 0 22px;
+  }
+  .stat {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    padding: 12px 6px;
+    border-radius: 12px;
+  }
+  .stat .v {
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--fire-orange);
+  }
+  .stat .l {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+
+  .rules {
+    text-align: left;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 8px 4px;
+  }
+  .rules h3 {
+    color: var(--fire-orange);
+    margin: 10px 0 4px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .rules p { margin: 4px 0; color: #d4c6b5; }
+  .rules .em { font-size: 22px; }
+
+  .high-score {
+    color: var(--fire-yellow);
+    font-size: 14px;
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+  }
+  .high-score b { font-size: 22px; }
+
+  /* ========== LEVEL UP TOAST ========== */
+  .toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 24px;
+    background: linear-gradient(180deg, var(--fire-orange), var(--fire-red));
+    color: white;
+    font-weight: 900;
+    letter-spacing: 3px;
+    border-radius: 50px;
+    box-shadow: 0 10px 30px rgba(255,40,0,.5);
+    z-index: 150;
+    animation: toastIn 2.2s forwards;
+  }
+  @keyframes toastIn {
+    0%   { transform: translate(-50%, -30px); opacity: 0; }
+    15%  { transform: translate(-50%, 0); opacity: 1; }
+    85%  { transform: translate(-50%, 0); opacity: 1; }
+    100% { transform: translate(-50%, -30px); opacity: 0; }
+  }
+
+  /* ========== MOBILE TUNING ========== */
+  @media (max-width: 480px) {
+    .hand { gap: 6px; }
+    .card { width: 18vw; height: 28vw; min-width: 60px; min-height: 95px; }
+    .hud { padding: 10px 12px; }
+    .panel { padding: 24px 18px; }
+  }
+
+  /* TODO ad banner placeholder slot (kept invisible until you enable AdSense) */
+  #ad-slot {
+    width: 100%;
+    height: 0;
+    /* TODO: Add Google AdSense leaderboard banner below game container */
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP HUD -->
+  <header class="hud">
+    <div class="hud-left">
+      <button class="icon-btn" id="btn-pause" title="Pause (Space)">⏸</button>
+      <button class="icon-btn" id="btn-sound" title="Sound (TODO)">🔊</button>
+    </div>
+    <div class="hud-center">
+      <div class="score-label">PUAN</div>
+      <div class="score" id="score">0</div>
+      <div class="multiplier" id="multiplier"></div>
+    </div>
+    <div class="hud-right" style="justify-content:flex-end;">
+      <div class="lives" id="lives">🔥🔥🔥</div>
+    </div>
+  </header>
+
+  <!-- PLAY AREA -->
+  <main class="play-area" id="play-area">
+    <div class="hand" id="hand"></div>
+  </main>
+
+  <!-- Ad slot (TODO) -->
+  <div id="ad-slot"></div>
+
+  <!-- START SCREEN -->
+  <div class="overlay" id="start-screen">
+    <div class="panel">
+      <div class="title">ATEŞ</div>
+      <div class="tagline">Elin alev alev — çabuk oyna!</div>
+      <div class="high-score">EN YÜKSEK: <b id="hi-start">0</b></div>
+      <button class="big-btn" id="btn-play">OYNA</button>
+      <br/>
+      <button class="ghost-btn" id="btn-howto">Nasıl Oynanır?</button>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY -->
+  <div class="overlay hidden" id="howto-screen">
+    <div class="panel">
+      <div class="title" style="font-size:42px;">NASIL OYNANIR</div>
+      <div class="rules">
+        <h3>Amaç</h3>
+        <p>Elindeki her kartın altında yanan bir fitil var. Fitil bitmeden kartı oyna, yoksa bir can kaybedersin.</p>
+
+        <h3>Kart Tipleri</h3>
+        <p><span class="em">1-9</span> Sayı kartı — puanı yüzündeki değerdir.</p>
+        <p><span class="em">🔥</span> Ateş — tüm fitilleri sıfırlar.</p>
+        <p><span class="em">❄️</span> Buz — 3 saniye tüm fitilleri dondurur.</p>
+        <p><span class="em">💣</span> Bomba — 3 saniye içinde oyna, yoksa can kaybı!</p>
+        <p><span class="em">⭐</span> Yıldız — 15 puan + otomatik kombo.</p>
+
+        <h3>Kombolar</h3>
+        <p>2 saniye içinde 3+ kart oynarsan <b>2x kombo</b> bonusu kazanırsın.</p>
+        <p>Fitili 1 saniyenin altındayken oynarsan <b>FIRE CHAIN</b> — puan ikiye katlanır!</p>
+
+        <h3>Zorluk</h3>
+        <p>Her 30 saniyede fitiller kısalır. Ne kadar dayanabilirsin?</p>
+      </div>
+      <button class="big-btn" id="btn-howto-close">ANLADIM</button>
+    </div>
+  </div>
+
+  <!-- PAUSE SCREEN -->
+  <div class="overlay hidden" id="pause-screen">
+    <div class="panel">
+      <div class="title" style="font-size:54px;">DURAKLAT</div>
+      <div class="tagline">Devam etmek için tıkla</div>
+      <button class="big-btn" id="btn-resume">DEVAM ET</button>
+      <br/>
+      <button class="ghost-btn" id="btn-quit">Çıkış</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div class="overlay hidden" id="gameover-screen">
+    <div class="panel">
+      <div class="title" style="font-size:54px;">YANDIN!</div>
+      <div class="tagline">Eldeki kartlar küle döndü</div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="final-score">0</div><div class="l">Puan</div></div>
+        <div class="stat"><div class="v" id="final-combos">0</div><div class="l">Kombo</div></div>
+        <div class="stat"><div class="v" id="final-hi">0</div><div class="l">Rekor</div></div>
+      </div>
+      <button class="big-btn" id="btn-again">TEKRAR</button>
+      <br/>
+      <button class="ghost-btn" id="btn-share">📤 PAYLAŞ</button>
+      <button class="ghost-btn" id="btn-menu">Menü</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* =====================================================================
+   ATEŞ — Hand on Fire
+   ===================================================================== */
+
+const CONFIG = {
+  gameName: "ATEŞ",
+  startLives: 3,
+  startFuseMin: 5,
+  startFuseMax: 10,
+  comboWindow: 2000,
+  difficultyInterval: 30000,
+  fuseReductionPerLevel: 0.5,
+};
+
+// TODO: Add Google AdSense leaderboard banner below game container
+// TODO: Add "Remove Ads" button linking to /premium
+// TODO: Submit to CrazyGames API for portal integration
+// TODO: Add Poki SDK (2 lines) for Poki.com submission
+// e.g.  <script src="//game-cdn.poki.com/scripts/v2/poki-sdk.js"><\/script>
+//       PokiSDK.init().then(() => PokiSDK.gameLoadingFinished());
+
+/* ---------- DOM refs ---------- */
+const $ = (id) => document.getElementById(id);
+const handEl       = $("hand");
+const playAreaEl   = $("play-area");
+const scoreEl      = $("score");
+const livesEl      = $("lives");
+const multEl       = $("multiplier");
+const startScreen  = $("start-screen");
+const howtoScreen  = $("howto-screen");
+const pauseScreen  = $("pause-screen");
+const gameoverScreen = $("gameover-screen");
+
+/* ---------- Game state ---------- */
+let state = null;
+
+function freshState() {
+  return {
+    hand: [],          // array of card objects
+    lives: CONFIG.startLives,
+    score: 0,
+    combos: 0,         // total combos triggered
+    comboCount: 0,     // current streak counter
+    lastPlayTime: 0,
+    handSize: 5,
+    nextCardId: 1,
+    level: 0,          // difficulty level
+    fuseMultiplier: 1, // shrinks fuses over time
+    frozenUntil: 0,    // ms timestamp when freeze ends
+    startTime: 0,
+    running: false,
+    paused: false,
+    levelTimer: 0,
+  };
+}
+
+/* ---------- Card factory ---------- */
+const NUMBERS = [1,2,3,4,5,6,7,8,9];
+// Weighted draw pool
+function randomCardType() {
+  const r = Math.random();
+  if (r < 0.06) return "fire";
+  if (r < 0.12) return "freeze";
+  if (r < 0.18) return "bomb";
+  if (r < 0.25) return "star";
+  return "num";
+}
+
+function makeCard() {
+  const type = randomCardType();
+  let fuse, value, face;
+  const minF = CONFIG.startFuseMin * state.fuseMultiplier;
+  const maxF = CONFIG.startFuseMax * state.fuseMultiplier;
+  switch (type) {
+    case "fire":
+      face = "🔥"; value = 5;
+      fuse = Math.max(2.5, randRange(minF, maxF));
+      break;
+    case "freeze":
+      face = "❄️"; value = 5;
+      fuse = Math.max(2.5, randRange(minF, maxF));
+      break;
+    case "bomb":
+      face = "💣"; value = 20;
+      fuse = Math.max(2, 3 * state.fuseMultiplier); // forced 3s base
+      break;
+    case "star":
+      face = "⭐"; value = 15;
+      fuse = Math.max(2.5, randRange(minF, maxF));
+      break;
+    default: {
+      const n = NUMBERS[(Math.random() * NUMBERS.length) | 0];
+      face = String(n);
+      value = n;
+      fuse = Math.max(2, randRange(minF, maxF));
+    }
+  }
+  return {
+    id: state.nextCardId++,
+    type, face, value,
+    fuseMax: fuse * 1000,   // ms
+    fuseLeft: fuse * 1000,  // ms
+    bornAt: performance.now(),
+    el: null,
+    fuseEl: null,
+  };
+}
+
+function randRange(a, b) { return a + Math.random() * (b - a); }
+
+/* ---------- Rendering ---------- */
+function renderCard(card) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.dataset.type = card.type;
+  el.dataset.id   = card.id;
+
+  el.innerHTML = `
+    <div class="corner tl">${escapeHtml(card.face)}</div>
+    <div class="face">${escapeHtml(card.face)}</div>
+    <div class="corner br">${escapeHtml(card.face)}</div>
+    <div class="fuse-wrap"><div class="fuse"></div></div>
+  `;
+  el.addEventListener("click", () => playCard(card.id));
+  el.addEventListener("touchstart", (e) => { e.preventDefault(); playCard(card.id); }, { passive:false });
+
+  card.el = el;
+  card.fuseEl = el.querySelector(".fuse");
+  handEl.appendChild(el);
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ---------- Hand management ---------- */
+function dealInitialHand() {
+  handEl.innerHTML = "";
+  state.hand = [];
+  for (let i = 0; i < state.handSize; i++) {
+    const c = makeCard();
+    state.hand.push(c);
+    renderCard(c);
+  }
+}
+function drawReplacement() {
+  if (state.hand.length >= state.handSize) return;
+  const c = makeCard();
+  state.hand.push(c);
+  renderCard(c);
+}
+
+/* ---------- Play / Burn ---------- */
+function playCard(id) {
+  if (!state.running || state.paused) return;
+  const idx = state.hand.findIndex(c => c.id === id);
+  if (idx < 0) return;
+  const card = state.hand[idx];
+  if (card._gone) return;
+  card._gone = true;
+
+  const now = performance.now();
+  const timeLeftSec = card.fuseLeft / 1000;
+  const fireChain = timeLeftSec < 1; // <1s = fire chain bonus
+
+  // Combo logic
+  if (now - state.lastPlayTime <= CONFIG.comboWindow) {
+    state.comboCount++;
+  } else {
+    state.comboCount = 1;
+  }
+  state.lastPlayTime = now;
+
+  // Star always counts as combo-extender
+  if (card.type === "star" && state.comboCount < 3) state.comboCount = 3;
+
+  // Score calc
+  let points = card.value;
+  // speed bonus: faster play = more bonus (up to +50% of value)
+  const speedRatio = 1 - (timeLeftSec * 1000 / card.fuseMax); // 0..1, higher = faster
+  const speedBonus = Math.round(card.value * speedRatio * 0.5);
+  points += speedBonus;
+
+  let multiplierLabel = "";
+  let multiplier = 1;
+
+  if (fireChain) {
+    multiplier *= 2;
+    multiplierLabel = "🔥 FIRE CHAIN x2";
+  }
+  if (state.comboCount >= 3) {
+    multiplier *= 2;
+    state.combos++;
+    multiplierLabel = (multiplierLabel ? multiplierLabel + " · " : "") + `COMBO x${state.comboCount}`;
+    spawnBurst(card.el);
+  }
+
+  const totalGain = points * multiplier;
+  state.score += totalGain;
+  scoreEl.textContent = state.score;
+
+  // Floating popup
+  spawnPop(card.el, "+" + totalGain + (multiplier > 1 ? " ✨" : ""));
+
+  // Multiplier label flash
+  if (multiplierLabel) {
+    multEl.textContent = multiplierLabel;
+    clearTimeout(multEl._t);
+    multEl._t = setTimeout(()=> multEl.textContent = "", 1100);
+  }
+
+  // Card special effects
+  if (card.type === "fire") {
+    // Refill all fuse timers
+    state.hand.forEach(c => { if (!c._gone) c.fuseLeft = c.fuseMax; });
+  } else if (card.type === "freeze") {
+    state.frozenUntil = now + 3000;
+    playAreaEl.classList.add("frozen");
+    setTimeout(() => {
+      if (performance.now() >= state.frozenUntil) playAreaEl.classList.remove("frozen");
+    }, 3050);
+  }
+
+  // Remove from hand
+  state.hand.splice(idx, 1);
+  card.el.classList.add("played");
+  setTimeout(() => card.el && card.el.remove(), 350);
+
+  // Draw replacement immediately
+  drawReplacement();
+}
+
+function burnCard(card) {
+  if (card._gone) return;
+  card._gone = true;
+  const idx = state.hand.findIndex(c => c.id === card.id);
+  if (idx >= 0) state.hand.splice(idx, 1);
+
+  // Visual burn
+  if (card.el) {
+    card.el.classList.add("burned");
+    setTimeout(() => card.el && card.el.remove(), 480);
+  }
+
+  // Lose a life
+  loseLife();
+
+  // Reset combo
+  state.comboCount = 0;
+
+  // Replace card if still alive
+  if (state.running) drawReplacement();
+}
+
+function loseLife() {
+  state.lives--;
+  renderLives();
+  flashRed();
+  if (state.lives <= 0) endGame();
+}
+
+function renderLives() {
+  let s = "";
+  for (let i = 0; i < CONFIG.startLives; i++) {
+    s += i < state.lives ? "🔥" : `<span class="dead">🔥</span>`;
+  }
+  livesEl.innerHTML = s;
+}
+
+/* ---------- Effects ---------- */
+function flashRed() {
+  const fx = document.createElement("div");
+  fx.className = "flash-red";
+  document.body.appendChild(fx);
+  setTimeout(() => fx.remove(), 420);
+}
+
+function spawnPop(anchor, text) {
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const pop = document.createElement("div");
+  pop.className = "pop";
+  pop.textContent = text;
+  pop.style.left = (rect.left + rect.width/2) + "px";
+  pop.style.top  = (rect.top  + 20) + "px";
+  document.body.appendChild(pop);
+  setTimeout(() => pop.remove(), 1000);
+}
+
+function spawnBurst(anchor) {
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const burst = document.createElement("div");
+  burst.className = "burst";
+  burst.style.left = (rect.left + rect.width/2) + "px";
+  burst.style.top  = (rect.top  + rect.height/2) + "px";
+  const N = 14;
+  for (let i = 0; i < N; i++) {
+    const s = document.createElement("span");
+    const ang = (Math.PI * 2 * i) / N + Math.random()*0.3;
+    const dist = 70 + Math.random()*60;
+    s.style.setProperty("--tx", Math.cos(ang)*dist + "px");
+    s.style.setProperty("--ty", Math.sin(ang)*dist + "px");
+    s.style.background = i % 2 ? "var(--fire-orange)" : "var(--fire-yellow)";
+    burst.appendChild(s);
+  }
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 900);
+}
+
+function showToast(text) {
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2300);
+}
+
+/* ---------- Main loop ---------- */
+let rafId = null;
+let lastFrame = 0;
+
+function loop(ts) {
+  if (!state.running) return;
+  if (!lastFrame) lastFrame = ts;
+  const dt = ts - lastFrame;
+  lastFrame = ts;
+
+  if (!state.paused) {
+    const frozen = ts < state.frozenUntil;
+    if (!frozen) {
+      playAreaEl.classList.remove("frozen");
+      // Update fuses
+      for (const c of state.hand) {
+        if (c._gone) continue;
+        c.fuseLeft -= dt;
+        const ratio = Math.max(0, c.fuseLeft / c.fuseMax);
+        if (c.fuseEl) c.fuseEl.style.width = (ratio * 100) + "%";
+
+        // Color transition
+        let color;
+        if (ratio > 0.6)      color = "linear-gradient(90deg,#3ad177,#a8e063)";
+        else if (ratio > 0.35) color = "linear-gradient(90deg,#ffd23f,#ffb347)";
+        else if (ratio > 0.18) color = "linear-gradient(90deg,#ff8a18,#ff5a18)";
+        else                  color = "linear-gradient(90deg,#ff2a2a,#ff0040)";
+        if (c.fuseEl) c.fuseEl.style.background = color;
+
+        // Critical shake
+        const critical = c.fuseLeft < 2000;
+        if (c.el) c.el.classList.toggle("critical", critical);
+
+        // Bomb forced 3s — already shorter fuse, normal burn handles it.
+        if (c.fuseLeft <= 0) burnCard(c);
+      }
+    }
+
+    // Difficulty ramp
+    state.levelTimer += dt;
+    if (state.levelTimer >= CONFIG.difficultyInterval) {
+      state.levelTimer = 0;
+      state.level++;
+      state.fuseMultiplier = Math.max(0.4, 1 - state.level * (CONFIG.fuseReductionPerLevel * 0.15));
+      // (slow shrink — each level reduces fuse by ~7.5%)
+      showToast("⚡ SEVİYE " + (state.level + 1));
+    }
+  }
+
+  rafId = requestAnimationFrame(loop);
+}
+
+/* ---------- Game flow ---------- */
+function startGame() {
+  state = freshState();
+  state.running = true;
+  state.startTime = performance.now();
+  scoreEl.textContent = "0";
+  multEl.textContent = "";
+  renderLives();
+  dealInitialHand();
+  hide(startScreen); hide(gameoverScreen); hide(pauseScreen);
+  lastFrame = 0;
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(loop);
+}
+
+function endGame() {
+  state.running = false;
+  cancelAnimationFrame(rafId);
+  // High score
+  const hi = Math.max(getHi(), state.score);
+  setHi(hi);
+  $("final-score").textContent  = state.score;
+  $("final-combos").textContent = state.combos;
+  $("final-hi").textContent     = hi;
+  show(gameoverScreen);
+}
+
+function pauseGame() {
+  if (!state || !state.running) return;
+  state.paused = true;
+  show(pauseScreen);
+}
+function resumeGame() {
+  if (!state) return;
+  state.paused = false;
+  hide(pauseScreen);
+  lastFrame = 0;
+}
+function togglePause() {
+  if (state && state.paused) resumeGame(); else pauseGame();
+}
+function quitToMenu() {
+  state.running = false;
+  cancelAnimationFrame(rafId);
+  hide(pauseScreen); hide(gameoverScreen);
+  $("hi-start").textContent = getHi();
+  show(startScreen);
+  handEl.innerHTML = "";
+}
+
+/* ---------- Storage ---------- */
+function getHi() { return parseInt(localStorage.getItem("ates_hi") || "0", 10) || 0; }
+function setHi(v){ localStorage.setItem("ates_hi", String(v)); }
+function getSeenHowto() { return localStorage.getItem("ates_seen_howto") === "1"; }
+function setSeenHowto() { localStorage.setItem("ates_seen_howto", "1"); }
+
+/* ---------- Share ---------- */
+function shareScore() {
+  const url = location.href.split("#")[0];
+  const text = `🔥 ATEŞ'te ${state.score} puan yaptım! ${state.combos} kombo! Oynayabilir misin? ${url}`;
+  if (navigator.share) {
+    navigator.share({ title: "ATEŞ", text }).catch(()=>{});
+  } else {
+    navigator.clipboard?.writeText(text);
+    showToast("Paylaşım panoya kopyalandı!");
+  }
+}
+
+/* ---------- Helpers ---------- */
+function show(el) { el.classList.remove("hidden"); }
+function hide(el) { el.classList.add("hidden"); }
+
+/* ---------- Event listeners ---------- */
+$("btn-play").addEventListener("click", () => {
+  if (!getSeenHowto()) {
+    setSeenHowto();
+    hide(startScreen);
+    show(howtoScreen);
+  } else {
+    startGame();
+  }
+});
+$("btn-howto").addEventListener("click", () => { hide(startScreen); show(howtoScreen); });
+$("btn-howto-close").addEventListener("click", () => { hide(howtoScreen); startGame(); });
+$("btn-pause").addEventListener("click", togglePause);
+$("btn-resume").addEventListener("click", resumeGame);
+$("btn-quit").addEventListener("click", quitToMenu);
+$("btn-again").addEventListener("click", startGame);
+$("btn-menu").addEventListener("click", quitToMenu);
+$("btn-share").addEventListener("click", shareScore);
+$("btn-sound").addEventListener("click", (e) => {
+  // TODO: hook actual SFX engine (WebAudio) — toggle only for now
+  const b = e.currentTarget;
+  const on = b.textContent === "🔊";
+  b.textContent = on ? "🔇" : "🔊";
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (!startScreen.classList.contains("hidden")) return;
+    if (!gameoverScreen.classList.contains("hidden")) return;
+    togglePause();
+  }
+});
+
+window.addEventListener("blur", () => { if (state && state.running && !state.paused) pauseGame(); });
+
+/* ---------- Boot ---------- */
+$("hi-start").textContent = getHi();
+if (!getSeenHowto()) {
+  // First visit: show How To Play immediately as a soft intro,
+  // but still keep start screen visible underneath.
+}
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
